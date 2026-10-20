@@ -1,0 +1,92 @@
+name: motillo
+services:
+  motillo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: motillo:local
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3060"
+      DATA_DIR: /data
+      MEROSS_CONNECTOR_URL: http://meross-connector:3070
+      CONNECTOR_TOKEN: ${CONNECTOR_TOKEN:-}
+      MEROSS_DEVICE_ID: ${MEROSS_DEVICE_ID:-}
+      APP_ORIGIN: ${APP_ORIGIN:-http://127.0.0.1:3060}
+      DAILY_ENERGY_RESET: ${DAILY_ENERGY_RESET:-true}
+      TZ: Europe/Madrid
+    ports:
+      - "127.0.0.1:3060:3060"
+    volumes:
+      - ./data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16M,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 100
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:3060/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "3"
+    depends_on:
+      meross-connector:
+        condition: service_started
+
+  meross-connector:
+    build:
+      context: .
+      dockerfile: connector/Dockerfile
+    image: motillo-meross:local
+    restart: unless-stopped
+    init: true
+    command: ["bun", "index.ts"]
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3070"
+      MEROSS_EMAIL: ${MEROSS_EMAIL:?Set MEROSS_EMAIL in .env}
+      MEROSS_PASSWORD: ${MEROSS_PASSWORD:?Set MEROSS_PASSWORD in .env}
+      MEROSS_REGION: ${MEROSS_REGION:-eu}
+      MEROSS_MFA_CODE: ${MEROSS_MFA_CODE:-}
+      MEROSS_DEVICE_ID: ${MEROSS_DEVICE_ID:-}
+      MEROSS_HOST: ${MEROSS_HOST:-}
+      MEROSS_STATE_PATH: /data/cloud-session.json
+      CONNECTOR_TOKEN: ${CONNECTOR_TOKEN:-}
+      TZ: Europe/Madrid
+    volumes:
+      - ./connector-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=8M,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 100
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:3070/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "3"

@@ -1,0 +1,5 @@
+# Generic self-hosted example. Copy compose.yaml to your deployment directory,
+# keep .env private, and adapt only the network/proxy settings for your host.
+# This file contains no host paths, device identifiers, IP addresses or domains.
+include:
+  - ../compose.yaml

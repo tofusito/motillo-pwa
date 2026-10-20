@@ -1,0 +1,12 @@
+import type {Period,Rates} from '../shared/model';
+export const madrid=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Madrid',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23',weekday:'short'});
+export function local(at:number){const p=Object.fromEntries(madrid.formatToParts(new Date(at)).map(x=>[x.type,x.value]));return {date:`${p.year}-${p.month}-${p.day}`,month:`${p.year}-${p.month}`,hour:Number(p.hour),weekend:p.weekday==='Sat'||p.weekday==='Sun'};}
+export const nationalHolidays=['01-01','01-06','05-01','08-15','10-12','11-01','12-06','12-08','12-25'];
+export function periodAt(at:number,holidays:string[]=[]):Period {const x=local(at);return x.weekend||nationalHolidays.includes(x.date.slice(5))||holidays.includes(x.date)||x.hour<8?'valle':(x.hour>=10&&x.hour<14)||(x.hour>=18&&x.hour<22)?'punta':'llano';}
+export type Piece={start:number;end:number;kwh:number;period:Period;date:string;month:string;hour:number};
+// UTC hour boundaries coincide with Madrid hour boundaries, including both DST transitions.
+export function split(start:number,end:number,kwh:number,holidays:string[]=[]):Piece[]{if(end<=start)return [];const out:Piece[]=[];for(let t=start;t<end;){const n=Math.min(end,(Math.floor(t/3600000)+1)*3600000);const x=local(t);out.push({start:t,end:n,kwh:kwh*(n-t)/(end-start),period:periodAt(t,holidays),...x});t=n;}return out;}
+export function unitPrice(at:number,rates:Rates[],holidays:string[]=[]):number|null {const r=rates.find(r=>r.month===local(at).month);if(!r)return null;return r.mode==='pvpc'?r.hourly?.[String(Math.floor(at/3600000)*3600000)]??null:r.mode==='flat'?r.valle:r[periodAt(at,holidays)];}
+export function price(piece:Piece,rates:Rates[]):number|null {const r=rates.find(r=>r.month===piece.month);const v=r?.mode==='pvpc'?r.hourly?.[String(Math.floor(piece.start/3600000)*3600000)]:r?.mode==='flat'?r.valle:r?.[piece.period];return v==null?null:piece.kwh*v;}
+export function fixedPrice(r:Rates|undefined,period:Period):number|null {return !r||r.mode==='pvpc'?null:r.mode==='flat'?r.valle:r[period];}
+export function dayPrices(date:string,rates:Rates[]):number[]|null {const r=rates.find(r=>r.month===date.slice(0,7));if(r?.mode!=='pvpc')return null;const start=Date.parse(date+'T00:00:00Z')-3*3600000,values:number[]=[];for(let t=start;t<start+30*3600000;t+=3600000){if(local(t).date!==date)continue;const v=unitPrice(t,[r]);if(v===null)return [];values.push(v);}return values;}
